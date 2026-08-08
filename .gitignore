@@ -1,0 +1,6 @@
+kpro_profile/
+*.xlsx
+*.csv
+__pycache__/
+.DS_Store
+.vscode/

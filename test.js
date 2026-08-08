@@ -1,0 +1,394 @@
+
+    var globalData = null;
+    var chartHBar = null;
+
+    // Start fetching data immediately
+    setTimeout(function() {
+      google.script.run
+        .withSuccessHandler(initDashboard)
+        .withFailureHandler(showError)
+        .getDashboardData();
+    }, 100);
+
+    // Fallback if google.script.run never responds
+    setTimeout(function() {
+       var el = document.getElementById('app');
+       if (el && el.innerHTML.includes('Loading Dashboard Data')) {
+          showError({ message: 'Request Timeout. Jaringan Anda mungkin memblokir script, atau backend sangat lambat.' });
+       }
+    }, 45000);
+
+    function showError(error) {
+      document.getElementById('app').innerHTML = 
+        '<div style="text-align: center; color: #ef4444; padding: 4rem; font-size: 18px;">' +
+        'Error loading data: ' + error.message +
+        '</div>';
+    }
+
+    function formatPercent(value) {
+      if (!value || isNaN(value)) return "0.0%";
+      return (value * 100).toFixed(1) + "%";
+    }
+    
+    function formatPercentTable(value) {
+      if (!value || isNaN(value)) return "0,0%";
+      return (value * 100).toFixed(1).replace('.', ',') + "%";
+    }
+
+    function initDashboard(response) {
+      if (!response.success) {
+        showError({ message: response.error || "Failed to load data." });
+        return;
+      }
+      globalData = response;
+      try {
+        renderApp();
+      } catch(e) {
+        showError({ message: "Render Error: " + e.message + " | Stack: " + e.stack });
+      }
+    }
+
+    function renderApp() {
+      var data = globalData.data;
+      var dateStr = globalData.dateStr;
+
+      var g_reMTD = 0, g_psMTD = 0, g_psMTDHomeId = 0, g_reMTDHomeId = 0;
+      var g_reHI = 0, g_psHI = 0, g_psHIHomeId = 0, g_reHIHomeId = 0;
+      
+      var districts = Object.keys(data).sort();
+      var districtStats = [];
+      var serviceAreaStats = [];
+
+      for (var i = 0; i < districts.length; i++) {
+        var d = districts[i];
+        var d_reMTD = 0, d_psMTD = 0, d_psMTDHomeId = 0, d_reMTDHomeId = 0, d_reHI = 0, d_psHI = 0, d_reHIHomeId = 0, d_psHIHomeId = 0;
+        
+        for (var key in data[d]) {
+          var row = data[d][key];
+          d_reHI += row.reHI; d_reMTD += row.reMTD;
+          d_psHI += row.psHI; d_psMTD += row.psMTD;
+          d_reHIHomeId += row.reHIHomeId; d_reMTDHomeId += row.reMTDHomeId;
+          d_psHIHomeId += row.psHIHomeId; d_psMTDHomeId += row.psMTDHomeId;
+          
+          serviceAreaStats.push({
+            district: d,
+            serviceArea: row.serviceArea,
+            reMTD: row.reMTD,
+            psMTD: row.psMTD
+          });
+        }
+        
+        g_reMTD += d_reMTD; g_psMTD += d_psMTD;
+        g_psMTDHomeId += d_psMTDHomeId; g_reMTDHomeId += d_reMTDHomeId;
+        g_reHI += d_reHI; g_psHI += d_psHI;
+        g_psHIHomeId += d_psHIHomeId; g_reHIHomeId += d_reHIHomeId;
+        districtStats.push({
+          district: d,
+          reMTD: d_reMTD, psMTD: d_psMTD,
+          reMTDHomeId: d_reMTDHomeId, psMTDHomeId: d_psMTDHomeId
+        });
+      }
+      
+      serviceAreaStats.sort(function(a, b) { return b.reMTD - a.reMTD; });
+
+      var g_psReMTD = g_reMTD > 0 ? (g_psMTD / g_reMTD) : 0;
+      var g_psReMTDHomeId = g_reMTDHomeId > 0 ? (g_psMTDHomeId / g_reMTDHomeId) : 0;
+      var g_psReHI = g_reHI > 0 ? (g_psHI / g_reHI) : 0;
+      var g_psReHIHomeId = g_reHIHomeId > 0 ? (g_psHIHomeId / g_reHIHomeId) : 0;
+
+      var appDiv = document.getElementById('app');
+      
+      var filterButtonsHtml = '<button class="filter-btn active" onclick="filterData(\\'ALL\\')">Semua</button>';
+      for (var j = 0; j < districts.length; j++) {
+        filterButtonsHtml += '<button class="filter-btn" onclick="filterData(\\'' + districts[j] + '\\')">' + districts[j] + '</button>';
+      }
+
+      appDiv.innerHTML = 
+        '<div class="header">' +
+          '<div>' +
+            '<div class="header-title">' +
+              '<div class="header-logo">R</div>' +
+              '<div>' +
+                'Monitoring PS/RE Gross' +
+                '<div class="header-subtitle">Indihome Region Eastern Jabotabek</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display: flex; gap: 12px; align-items: center;">' +
+            '<div class="header-badge">● LIVE</div>' +
+            '<div style="color: var(--text-muted); font-size: 12px;">🗓 ' + dateStr + '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="cards-grid">' +
+          '<div class="card card-1">' +
+            '<div class="card-icon" style="color: var(--color-info)">📦</div>' +
+            '<div class="card-title">TOTAL RE MTD</div>' +
+            '<div class="card-value">' + g_reMTD + '</div>' +
+            '<div class="card-label">Eastern Jabotabek</div>' +
+          '</div>' +
+          '<div class="card card-2">' +
+            '<div class="card-icon" style="color: var(--color-success)">📈</div>' +
+            '<div class="card-title">TOTAL PS MTD</div>' +
+            '<div class="card-value">' + g_psMTD + '</div>' +
+            '<div class="card-label">Indihome - All</div>' +
+          '</div>' +
+          '<div class="card card-3">' +
+            '<div class="card-icon" style="color: var(--color-primary)">⏱</div>' +
+            '<div class="card-title">PS/RE MTD</div>' +
+            '<div class="card-value" style="color: var(--color-primary)">' + formatPercent(g_psReMTD) + '</div>' +
+            '<div class="card-label">Indihome - All</div>' +
+          '</div>' +
+          '<div class="card card-4">' +
+            '<div class="card-icon" style="color: var(--color-secondary)">🏠</div>' +
+            '<div class="card-title">HOMEID PS/RE MTD</div>' +
+            '<div class="card-value highlight">' + formatPercent(g_psReMTDHomeId) + '</div>' +
+            '<div class="card-label">' + g_psMTDHomeId + ' PS MTD</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cards-grid" style="margin-top: 16px;">' +
+          '<div class="card card-1">' +
+            '<div class="card-icon" style="color: var(--color-info)">📦</div>' +
+            '<div class="card-title">TOTAL RE HI</div>' +
+            '<div class="card-value">' + g_reHI + '</div>' +
+            '<div class="card-label">Eastern Jabotabek</div>' +
+          '</div>' +
+          '<div class="card card-2">' +
+            '<div class="card-icon" style="color: var(--color-success)">📈</div>' +
+            '<div class="card-title">TOTAL PS HI</div>' +
+            '<div class="card-value">' + g_psHI + '</div>' +
+            '<div class="card-label">Indihome - All</div>' +
+          '</div>' +
+          '<div class="card card-3">' +
+            '<div class="card-icon" style="color: var(--color-primary)">⏱</div>' +
+            '<div class="card-title">PS/RE HI</div>' +
+            '<div class="card-value" style="color: var(--color-primary)">' + formatPercent(g_psReHI) + '</div>' +
+            '<div class="card-label">Indihome - All</div>' +
+          '</div>' +
+          '<div class="card card-4">' +
+            '<div class="card-icon" style="color: var(--color-secondary)">🏠</div>' +
+            '<div class="card-title">HOMEID PS/RE HI</div>' +
+            '<div class="card-value highlight">' + formatPercent(g_psReHIHomeId) + '</div>' +
+            '<div class="card-label">' + g_psHIHomeId + ' PS HI</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="charts-grid-top">' +
+          '<div class="chart-container">' +
+            '<div class="chart-title">PS/RE MTD per District</div>' +
+            '<canvas id="chartBar"></canvas>' +
+          '</div>' +
+          '<div class="chart-container">' +
+            '<div class="chart-title">Distribusi PS MTD per District</div>' +
+            '<canvas id="chartDonut"></canvas>' +
+            '<div style="position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); text-align: center;">' +
+              '<div style="font-size: 24px; font-weight: bold; color: white;">' + g_psMTD + '</div>' +
+              '<div style="font-size: 10px; color: var(--text-muted);">Total PS MTD</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="charts-grid-bottom">' +
+          '<div class="chart-container">' +
+            '<div class="filter-tabs" id="filterTabs">' + filterButtonsHtml + '</div>' +
+            '<div class="chart-title">RE MTD vs PS MTD per Service Area</div>' +
+            '<canvas id="chartHBar" style="max-height: 400px;"></canvas>' +
+          '</div>' +
+        '</div>' +
+        
+        '<div class="chart-title" style="margin-top: 32px;">Data Detail (Table)</div>' +
+        '<div class="table-container" id="tableWrapper"></div>';
+
+      Chart.defaults.color = '#94a3b8';
+      Chart.defaults.font.family = 'Inter';
+
+      new Chart(document.getElementById('chartBar'), {
+        type: 'bar',
+        data: {
+          labels: districtStats.map(function(d) { return d.district; }),
+          datasets: [
+            {
+              label: 'Indihome All',
+              data: districtStats.map(function(d) { return d.reMTD > 0 ? (d.psMTD / d.reMTD) * 100 : 0; }),
+              backgroundColor: '#8b5cf6',
+              borderRadius: 4
+            },
+            {
+              label: 'HomeID',
+              data: districtStats.map(function(d) { return d.reMTDHomeId > 0 ? (d.psMTDHomeId / d.reMTDHomeId) * 100 : 0; }),
+              backgroundColor: '#ec4899',
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 10, usePointStyle: true } } },
+          scales: {
+            y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+
+      new Chart(document.getElementById('chartDonut'), {
+        type: 'doughnut',
+        data: {
+          labels: districtStats.map(function(d) { return d.district; }),
+          datasets: [{
+            data: districtStats.map(function(d) { return d.psMTD; }),
+            backgroundColor: ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b'],
+            borderWidth: 0,
+            cutout: '75%'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } }
+        }
+      });
+
+      window.allServiceAreaStats = serviceAreaStats;
+      renderHBar('ALL');
+      renderTable();
+    }
+
+    function filterData(district) {
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      event.target.classList.add('active');
+      renderHBar(district);
+    }
+
+    function renderHBar(districtFilter) {
+      var dataToRender = window.allServiceAreaStats;
+      if (districtFilter !== 'ALL') {
+        dataToRender = dataToRender.filter(function(d) { return d.district === districtFilter; });
+      }
+      
+      if (chartHBar) chartHBar.destroy();
+      
+      chartHBar = new Chart(document.getElementById('chartHBar'), {
+        type: 'bar',
+        data: {
+          labels: dataToRender.map(function(d) { return d.serviceArea; }),
+          datasets: [
+            { label: 'RE MTD', data: dataToRender.map(function(d) { return d.reMTD; }), backgroundColor: '#8b5cf6', borderRadius: 4 },
+            { label: 'PS MTD', data: dataToRender.map(function(d) { return d.psMTD; }), backgroundColor: '#10b981', borderRadius: 4 }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 10, usePointStyle: true } } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function renderTable() {
+      var data = globalData.data;
+      var html = 
+        '<table id="dataTable">' +
+          '<thead>' +
+            '<tr>' +
+              '<th rowspan="2" class="bg-dark-blue">DISTRICT</th>' +
+              '<th rowspan="2" class="bg-dark-blue">SERVICE AREA</th>' +
+              '<th rowspan="2" class="bg-dark-blue">MITRA</th>' +
+              '<th colspan="6" class="bg-dark-red">INDIHOME - ALL</th>' +
+              '<th colspan="6" class="bg-dark-gray">HOMEID</th>' +
+            '</tr>' +
+            '<tr>' +
+              '<th class="bg-orange">RE HI</th><th class="bg-orange">RE MTD</th>' +
+              '<th class="bg-green">PS HI</th><th class="bg-green">PS MTD</th>' +
+              '<th class="bg-purple">PS/RE HI</th><th class="bg-purple">PS/RE MTD</th>' +
+              '<th class="bg-orange">RE HI</th><th class="bg-orange">RE MTD</th>' +
+              '<th class="bg-green">PS HI</th><th class="bg-green">PS MTD</th>' +
+              '<th class="bg-purple">PS/RE HI</th><th class="bg-purple">PS/RE MTD</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>';
+
+      var g_reHI = 0, g_reMTD = 0, g_psHI = 0, g_psMTD = 0;
+      var g_reHIHomeId = 0, g_reMTDHomeId = 0, g_psHIHomeId = 0, g_psMTDHomeId = 0;
+      var districtKeys = Object.keys(data).sort();
+
+      for (var i = 0; i < districtKeys.length; i++) {
+        var districtName = districtKeys[i];
+        var areaData = data[districtName];
+        var d_reHI = 0, d_reMTD = 0, d_psHI = 0, d_psMTD = 0;
+        var d_reHIHomeId = 0, d_reMTDHomeId = 0, d_psHIHomeId = 0, d_psMTDHomeId = 0;
+        var rowsHtml = '';
+        var areaKeys = Object.keys(areaData).sort(function(a, b) { return a.localeCompare(b); });
+
+        for (var j = 0; j < areaKeys.length; j++) {
+          var key = areaKeys[j];
+          var row = areaData[key];
+          d_reHI += row.reHI; d_reMTD += row.reMTD; d_psHI += row.psHI; d_psMTD += row.psMTD;
+          d_reHIHomeId += row.reHIHomeId; d_reMTDHomeId += row.reMTDHomeId; d_psHIHomeId += row.psHIHomeId; d_psMTDHomeId += row.psMTDHomeId;
+          
+          var psReHI = row.reHI > 0 ? (row.psHI / row.reHI) : 0;
+          var psReMTD = row.reMTD > 0 ? (row.psMTD / row.reMTD) : 0;
+          var psReHIHomeId = row.reHIHomeId > 0 ? (row.psHIHomeId / row.reHIHomeId) : 0;
+          var psReMTDHomeId = row.reMTDHomeId > 0 ? (row.psMTDHomeId / row.reMTDHomeId) : 0;
+          
+          rowsHtml += 
+            '<tr>' +
+              '<td class="bg-light-blue"></td>' +
+              '<td class="bg-light-blue"><strong>' + row.serviceArea + '</strong></td>' +
+              '<td class="bg-light-blue">' + row.mitra + '</td>' +
+              '<td class="bg-light-orange text-re">' + (row.reHI || 0) + '</td>' +
+              '<td class="bg-light-orange text-re">' + (row.reMTD || 0) + '</td>' +
+              '<td class="bg-light-green text-ps">' + (row.psHI || 0) + '</td>' +
+              '<td class="bg-light-green text-ps">' + (row.psMTD || 0) + '</td>' +
+              '<td class="bg-light-purple text-ratio">' + formatPercentTable(psReHI) + '</td>' +
+              '<td class="bg-light-purple text-ratio">' + formatPercentTable(psReMTD) + '</td>' +
+              '<td class="bg-light-orange text-re">' + (row.reHIHomeId || 0) + '</td>' +
+              '<td class="bg-light-orange text-re">' + (row.reMTDHomeId || 0) + '</td>' +
+              '<td class="bg-light-green text-ps">' + (row.psHIHomeId || 0) + '</td>' +
+              '<td class="bg-light-green text-ps">' + (row.psMTDHomeId || 0) + '</td>' +
+              '<td class="bg-light-purple text-ratio">' + formatPercentTable(psReHIHomeId) + '</td>' +
+              '<td class="bg-light-purple text-ratio">' + formatPercentTable(psReMTDHomeId) + '</td>' +
+            '</tr>';
+        }
+        
+        g_reHI += d_reHI; g_reMTD += d_reMTD; g_psHI += d_psHI; g_psMTD += d_psMTD;
+        g_reHIHomeId += d_reHIHomeId; g_reMTDHomeId += d_reMTDHomeId; g_psHIHomeId += d_psHIHomeId; g_psMTDHomeId += d_psMTDHomeId;
+
+        var d_psReHI = d_reHI > 0 ? (d_psHI / d_reHI) : 0;
+        var d_psReMTD = d_reMTD > 0 ? (d_psMTD / d_reMTD) : 0;
+        var d_psReHIHomeId = d_reHIHomeId > 0 ? (d_psHIHomeId / d_reHIHomeId) : 0;
+        var d_psReMTDHomeId = d_reMTDHomeId > 0 ? (d_psMTDHomeId / d_reMTDHomeId) : 0;
+        
+        html += 
+          '<tr class="row-district">' +
+            '<td>' + districtName + '</td>' +
+            '<td></td><td></td>' +
+            '<td>' + d_reHI + '</td><td>' + d_reMTD + '</td><td>' + d_psHI + '</td><td>' + d_psMTD + '</td>' +
+            '<td>' + formatPercentTable(d_psReHI) + '</td><td>' + formatPercentTable(d_psReMTD) + '</td>' +
+            '<td>' + d_reHIHomeId + '</td><td>' + d_reMTDHomeId + '</td><td>' + d_psHIHomeId + '</td><td>' + d_psMTDHomeId + '</td>' +
+            '<td>' + formatPercentTable(d_psReHIHomeId) + '</td><td>' + formatPercentTable(d_psReMTDHomeId) + '</td>' +
+          '</tr>' + rowsHtml;
+      }
+
+      var g_psReHI = g_reHI > 0 ? (g_psHI / g_reHI) : 0;
+      var g_psReMTD = g_reMTD > 0 ? (g_psMTD / g_reMTD) : 0;
+      var g_psReHIHomeId = g_reHIHomeId > 0 ? (g_psHIHomeId / g_reHIHomeId) : 0;
+      var g_psReMTDHomeId = g_reMTDHomeId > 0 ? (g_psMTDHomeId / g_reMTDHomeId) : 0;
+
+      html += 
+          '<tr class="row-grand-total">' +
+            '<td colspan="3">EASTERN JABOTABEK</td>' +
+            '<td>' + g_reHI + '</td><td>' + g_reMTD + '</td><td>' + g_psHI + '</td><td>' + g_psMTD + '</td>' +
+            '<td>' + formatPercentTable(g_psReHI) + '</td><td>' + formatPercentTable(g_psReMTD) + '</td>' +
+            '<td>' + g_reHIHomeId + '</td><td>' + g_reMTDHomeId + '</td><td>' + g_psHIHomeId + '</td><td>' + g_psMTDHomeId + '</td>' +
+            '<td>' + formatPercentTable(g_psReHIHomeId) + '</td><td>' + formatPercentTable(g_psReMTDHomeId) + '</td>' +
+          '</tr>' +
+        '</tbody></table>';
+
+      document.getElementById('tableWrapper').innerHTML = html;
+    }
+  
