@@ -3,7 +3,7 @@ name: Auto Update Dashboard
 on:
   schedule:
     # Berjalan setiap menit ke-0 pada setiap jam
-    - cron: '0 * * * *'
+   - cron: '0 9,14 * * *'
   workflow_dispatch: # Mengizinkan tombol manual trigger dari menu Actions
 
 permissions:
