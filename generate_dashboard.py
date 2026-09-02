@@ -15,9 +15,6 @@ def generate():
     df_re = pd.read_excel(file_path, sheet_name='DATA RE', header=None)
     df_ps = pd.read_excel(file_path, sheet_name='DATA PS', header=None)
 
-    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    today_str_ind = datetime.datetime.now().strftime("%d/%m/%Y")
-
     stoAggregations = {}
 
     # 1. Process MAPPING
@@ -34,11 +31,28 @@ def generate():
             'reHIHomeId': 0, 'reMTDHomeId': 0, 'psHIHomeId': 0, 'psMTDHomeId': 0
         }
 
-    today_d = datetime.datetime.now().day
-    today_m = datetime.datetime.now().month
-    today_y = datetime.datetime.now().year
-    today_m_d_y = f"{today_m}/{today_d}/{today_y}"
-    today_d_m_y = f"{today_d}/{today_m}/{today_y}"
+    # Cari tanggal terbaru (Maksimal) dari DATA RE dan DATA PS (kolom 66 / index 66)
+    # Ini sangat penting karena data KPRO biasanya H-1, jadi jika script dijalankan hari ini, "Hari Ini" harus mengacu ke H-1
+    dates_re = pd.to_datetime(df_re[66].dropna(), errors='coerce', dayfirst=True)
+    dates_ps = pd.to_datetime(df_ps[66].dropna(), errors='coerce', dayfirst=True)
+    all_dates = pd.concat([dates_re, dates_ps]).dropna()
+    
+    if not all_dates.empty:
+        latest_date = all_dates.max()
+        today_str = latest_date.strftime("%Y-%m-%d")
+        today_str_ind = latest_date.strftime("%d/%m/%Y")
+        today_d = latest_date.day
+        today_m = latest_date.month
+        today_y = latest_date.year
+        today_m_d_y = f"{today_m}/{today_d}/{today_y}"
+        today_d_m_y = f"{today_d}/{today_m}/{today_y}"
+    else:
+        # Fallback jika sheet kosong
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        today_str_ind = now.strftime("%d/%m/%Y")
+        today_m_d_y = f"{now.month}/{now.day}/{now.year}"
+        today_d_m_y = f"{now.day}/{now.month}/{now.year}"
 
     def is_date_match(val):
         if pd.isna(val): return False
